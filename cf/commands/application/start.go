@@ -142,6 +142,7 @@ func (cmd *Start) ApplicationStart(app models.Application, orgName, spaceName st
 	}
 
 	return cmd.WatchStaging(app, orgName, spaceName, func(app models.Application) (models.Application, error) {
+		fmt.Println("begin start func")
 		cmd.ui.Say(T("Starting app {{.AppName}} in org {{.OrgName}} / space {{.SpaceName}} as {{.CurrentUser}}...",
 			map[string]interface{}{
 				"AppName":     terminal.EntityNameColor(app.Name),
@@ -150,11 +151,13 @@ func (cmd *Start) ApplicationStart(app models.Application, orgName, spaceName st
 				"CurrentUser": terminal.EntityNameColor(cmd.config.Username())}))
 
 		state := "STARTED"
+		fmt.Printf("end start func")
 		return cmd.appRepo.Update(app.GUID, models.AppParams{State: &state})
 	})
 }
 
 func (cmd *Start) WatchStaging(app models.Application, orgName, spaceName string, start func(app models.Application) (models.Application, error)) (models.Application, error) {
+	fmt.Println("begin WatchStaging")
 	stopChan := make(chan bool, 1)
 
 	loggingStartedWait := new(sync.WaitGroup)
@@ -163,23 +166,29 @@ func (cmd *Start) WatchStaging(app models.Application, orgName, spaceName string
 	loggingDoneWait := new(sync.WaitGroup)
 	loggingDoneWait.Add(1)
 
+	fmt.Println("kicking off TailStagingLogs")
 	go cmd.TailStagingLogs(app, stopChan, loggingStartedWait, loggingDoneWait)
-
+	fmt.Println("kicked off TailStagingLogs")
+	fmt.Println("loggingStartedWait waiting")
 	loggingStartedWait.Wait()
+	fmt.Println("loggingStartedWait released")
 
 	updatedApp, err := start(app)
 	if err != nil {
+		fmt.Printf("start func returned err: %s\n", err.Error())
 		return models.Application{}, err
 	}
 
 	isStaged, err := cmd.waitForInstancesToStage(updatedApp)
 	if err != nil {
+		fmt.Printf("waitForInstancesToStage returned err: %s\n", err.Error())
 		return models.Application{}, err
 	}
-
+	fmt.Println("write to stopChan")
 	stopChan <- true
-
+	fmt.Println("loggingDoneWait waiting")
 	loggingDoneWait.Wait()
+	fmt.Println("loggingDoneWait released")
 
 	cmd.ui.Say("")
 
@@ -189,6 +198,7 @@ func (cmd *Start) WatchStaging(app models.Application, orgName, spaceName string
 
 	err = cmd.waitForOneRunningInstance(updatedApp)
 	if err != nil {
+		fmt.Printf("waitForOneRunningInstance returned err: %s\n", err.Error())
 		return models.Application{}, err
 	}
 	cmd.ui.Say(terminal.HeaderColor(T("\nApp started\n")))
@@ -236,14 +246,18 @@ const (
 )
 
 func (cmd *Start) TailStagingLogs(app models.Application, stopChan chan bool, startWait, doneWait *sync.WaitGroup) {
+	fmt.Println("begin TailStagingLogs")
 	var connectionStatus ConnectionType
 	connectionStatus = NoConnection
 
 	onConnect := func() {
+		fmt.Println("begin onConnect")
 		if connectionStatus != StoppedTrying {
+			fmt.Println("onConnect connectionStatus!=StoppedTrying")
 			connectionStatus = ConnectionWasEstablished
 			startWait.Done()
 		}
+		fmt.Println("end onConnect")
 	}
 
 	timer := time.NewTimer(cmd.LogServerConnectionTimeout)
@@ -252,42 +266,57 @@ func (cmd *Start) TailStagingLogs(app models.Application, stopChan chan bool, st
 	e := make(chan error)
 
 	defer doneWait.Done()
-
+	fmt.Println("kicking off TailLogsFor")
 	go cmd.logRepo.TailLogsFor(app.GUID, onConnect, c, e)
-
+	fmt.Println("kicked off TailLogsFor")
 	for {
 		select {
 		case <-timer.C:
+			fmt.Println("local timer triggered")
 			if connectionStatus == NoConnection {
+				fmt.Println("local timer triggered connectionStatus==NoConnection")
 				connectionStatus = StoppedTrying
 				cmd.ui.Warn("timeout connecting to log server, no log will be shown")
 				startWait.Done()
+				fmt.Println("local timer triggered return")
 				return
 			}
+			fmt.Println("local timer triggered continue")
 		case msg, ok := <-c:
+			fmt.Println("message received on channel")
 			if !ok {
+				fmt.Println("message received on channel broken")
 				return
 			} else if msg.GetSourceName() == LogMessageTypeStaging {
+				fmt.Println("message received on channel logging")
 				cmd.ui.Say(msg.ToSimpleLog())
 			}
 
 		case err, ok := <-e:
+			fmt.Println("error received on channel")
 			if ok {
 				if connectionStatus != ConnectionWasClosed {
+					fmt.Println("error received on channel connectionStatus!=ConnectionWasClosed")
 					cmd.ui.Warn(T("Warning: error tailing logs"))
 					cmd.ui.Say("%s", err)
 					if connectionStatus == NoConnection {
+						fmt.Println("error received on channel connectionStatus==NoConnection")
 						startWait.Done()
 					}
+					fmt.Println("error received on channel return")
 					return
 				}
 			}
+			fmt.Println("error received on channel continue")
 
 		case <-stopChan:
+			fmt.Println("stopChan received")
 			if connectionStatus == ConnectionWasEstablished {
+				fmt.Println("stopChan received connectionStatus==ConnectionWasEstablished")
 				connectionStatus = ConnectionWasClosed
 				cmd.logRepo.Close()
 			} else {
+				fmt.Println("stopChan received return")
 				return
 			}
 		}
@@ -295,28 +324,34 @@ func (cmd *Start) TailStagingLogs(app models.Application, stopChan chan bool, st
 }
 
 func (cmd *Start) waitForInstancesToStage(app models.Application) (bool, error) {
+	fmt.Println("begin waitForInstancesToStage")
 	stagingStartTime := time.Now()
 
 	var err error
 
 	if cmd.StagingTimeout == 0 {
+		fmt.Println("waitForInstancesToStage try once")
 		app, err = cmd.appRepo.GetApp(app.GUID)
 	} else {
+		fmt.Println("waitForInstancesToStage try repeat")
 		for app.PackageState != "STAGED" && app.PackageState != "FAILED" && time.Since(stagingStartTime) < cmd.StagingTimeout {
+			fmt.Println("waitForInstancesToStage trying")
 			app, err = cmd.appRepo.GetApp(app.GUID)
 			if err != nil {
 				break
 			}
-
+			fmt.Println("waitForInstancesToStage sleep")
 			time.Sleep(cmd.PingerThrottle)
 		}
 	}
 
 	if err != nil {
+		fmt.Println("waitForInstancesToStage return err")
 		return false, err
 	}
 
 	if app.PackageState == "FAILED" {
+		fmt.Println("waitForInstancesToStage PackageState==FAILED")
 		cmd.ui.Say("")
 		if app.StagingFailedReason == "NoAppDetectedError" {
 			return false, errors.New(T(`{{.Err}}
@@ -339,24 +374,30 @@ Use '{{.Command}}' for more in depth log information.`,
 	}
 
 	if time.Since(stagingStartTime) >= cmd.StagingTimeout {
+		fmt.Println("waitForInstancesToStage timeout")
 		return false, nil
 	}
 
+	fmt.Println("end waitForInstancesToStage")
 	return true, nil
 }
 
 func (cmd *Start) waitForOneRunningInstance(app models.Application) error {
+	fmt.Println("begin waitForOneRunningInstance")
 	timer := time.NewTimer(cmd.StartupTimeout)
 
 	for {
+		fmt.Println("waitForOneRunningInstance trying")
 		select {
 		case <-timer.C:
+			fmt.Println("waitForOneRunningInstance timeout")
 			tipMsg := T("Start app timeout\n\nTIP: Application must be listening on the right port. Instead of hard coding the port, use the $PORT environment variable.") + "\n\n"
 			tipMsg += T("Use '{{.Command}}' for more information", map[string]interface{}{"Command": terminal.CommandColor(fmt.Sprintf("%s logs %s --recent", cf.Name, app.Name))})
 
 			return errors.New(tipMsg)
 
 		default:
+			fmt.Println("waitForOneRunningInstance trying")
 			count, err := cmd.fetchInstanceCount(app.GUID)
 			if err != nil {
 				cmd.ui.Warn("Could not fetch instance count: %s", err.Error())
@@ -367,14 +408,16 @@ func (cmd *Start) waitForOneRunningInstance(app models.Application) error {
 			cmd.ui.Say(instancesDetails(count))
 
 			if count.running > 0 {
+				fmt.Println("waitForOneRunningInstance running instances")
 				return nil
 			}
 
 			if count.flapping > 0 || count.crashed > 0 {
+				fmt.Println("waitForOneRunningInstance crashed instances")
 				return fmt.Errorf(T("Start unsuccessful\n\nTIP: use '{{.Command}}' for more information",
 					map[string]interface{}{"Command": terminal.CommandColor(fmt.Sprintf("%s logs %s --recent", cf.Name, app.Name))}))
 			}
-
+			fmt.Println("waitForOneRunningInstance sleep")
 			time.Sleep(cmd.PingerThrottle)
 		}
 	}
