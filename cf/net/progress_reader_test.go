@@ -2,10 +2,10 @@ package net_test
 
 import (
 	"io"
-	"os"
 	"time"
 
 	. "github.com/cloudfoundry/cli/cf/net"
+	"github.com/cloudfoundry/cli/cf/net/netfakes"
 	"github.com/cloudfoundry/cli/cf/terminal/terminalfakes"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -13,65 +13,58 @@ import (
 
 var _ = Describe("ProgressReader", func() {
 	var (
-		testFile       *os.File
-		err            error
+		testFile       *netfakes.FakeReadSeekCloser
 		progressReader *ProgressReader
 		ui             *terminalfakes.FakeUI
 		b              []byte
-		fileStat       os.FileInfo
 	)
 
 	BeforeEach(func() {
 		ui = new(terminalfakes.FakeUI)
 
-		testFile, err = os.Open("../../fixtures/test.file")
-		Expect(err).NotTo(HaveOccurred())
-
-		fileStat, err = testFile.Stat()
-		Expect(err).NotTo(HaveOccurred())
+		testFile = new(netfakes.FakeReadSeekCloser)
 
 		b = make([]byte, 1024)
-		progressReader = NewProgressReader(testFile, ui, 1*time.Millisecond)
-		progressReader.SetTotalSize(fileStat.Size())
-	})
 
-	AfterEach(func() {
-		err := testFile.Close()
-		Expect(err).NotTo(HaveOccurred())
+		counter := 0
+		testFile.ReadStub = func(p []byte) (int, error) {
+			counter = counter + 1
+			if counter < 2 {
+				p = []byte("hello")
+				return len(p), nil
+			}
+
+			p = []byte("hellohello")
+			return len([]byte("hello")), io.EOF
+		}
+
+		progressReader = NewProgressReader(testFile, ui, 1*time.Millisecond)
+		progressReader.SetTotalSize(int64(len([]byte("hellohello"))))
 	})
 
 	It("prints progress while content is being read", func() {
 		for {
-			time.Sleep(50 * time.Microsecond)
+			time.Sleep(2 * time.Millisecond)
 			_, err := progressReader.Read(b)
-			if err == io.EOF {
+			if err != nil {
 				break
 			}
-			Expect(err).NotTo(HaveOccurred())
 		}
 
-		Expect(ui.SayCallCount()).To(Equal(1))
-		Expect(ui.SayArgsForCall(0)).To(ContainSubstring("\rDone "))
+		Eventually(ui.SayCallCount).Should(Equal(1))
+		Eventually(func() string {
+			output, _ := ui.SayArgsForCall(0)
+			return output
+		}).Should(ContainSubstring("\rDone "))
 
-		Expect(ui.PrintCapturingNoOutputCallCount()).To(BeNumerically(">", 0))
-		status, _ := ui.PrintCapturingNoOutputArgsForCall(0)
-		Expect(status).To(ContainSubstring("uploaded..."))
-		status, _ = ui.PrintCapturingNoOutputArgsForCall(ui.PrintCapturingNoOutputCallCount() - 1)
-		Expect(status).To(Equal("\r                             "))
-	})
-
-	It("reads the correct number of bytes", func() {
-		bytesRead := 0
-
-		for {
-			n, err := progressReader.Read(b)
-			if err == io.EOF {
-				break
-			}
-			Expect(err).NotTo(HaveOccurred())
-			bytesRead += n
-		}
-
-		Expect(int64(bytesRead)).To(Equal(fileStat.Size()))
+		Eventually(ui.PrintCapturingNoOutputCallCount).Should(BeNumerically(">", 0))
+		Eventually(func() string {
+			output, _ := ui.PrintCapturingNoOutputArgsForCall(0)
+			return output
+		}).Should(ContainSubstring("uploaded..."))
+		Eventually(func() string {
+			output, _ := ui.PrintCapturingNoOutputArgsForCall(ui.PrintCapturingNoOutputCallCount() - 1)
+			return output
+		}).Should(Equal("\r                             "))
 	})
 })

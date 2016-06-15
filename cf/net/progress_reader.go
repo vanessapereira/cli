@@ -10,8 +10,15 @@ import (
 	"github.com/cloudfoundry/cli/cf/terminal"
 )
 
+//go:generate counterfeiter . ReadSeekCloser
+
+type ReadSeekCloser interface {
+	io.ReadCloser
+	io.Seeker
+}
+
 type ProgressReader struct {
-	ioReadSeeker   io.ReadSeeker
+	r              ReadSeekCloser
 	bytesRead      int64
 	total          int64
 	quit           chan bool
@@ -20,38 +27,47 @@ type ProgressReader struct {
 	mutex          sync.RWMutex
 }
 
-func NewProgressReader(readSeeker io.ReadSeeker, ui terminal.UI, outputInterval time.Duration) *ProgressReader {
+func NewProgressReader(r ReadSeekCloser, ui terminal.UI, outputInterval time.Duration) *ProgressReader {
 	return &ProgressReader{
-		ioReadSeeker:   readSeeker,
+		r:              r,
 		ui:             ui,
 		outputInterval: outputInterval,
 		mutex:          sync.RWMutex{},
 	}
 }
 
-func (progressReader *ProgressReader) Read(p []byte) (int, error) {
-	if progressReader.ioReadSeeker == nil {
+// Read will read from the underlying Reader,
+// each time comparing the total number of bytes read so far
+// with the expected total (set by SetTotalSize)
+//
+// The first time Read is called, it starts up a goroutine
+// which periodically prints the Reader's progress.
+func (pr *ProgressReader) Read(p []byte) (int, error) {
+	if pr.r == nil {
 		return 0, os.ErrInvalid
 	}
 
-	n, err := progressReader.ioReadSeeker.Read(p)
-	if err != nil {
-		return 0, err
-	}
+	n, err := pr.r.Read(p)
 
-	if progressReader.total > int64(0) {
+	if pr.total > int64(0) {
 		if n > 0 {
-			if progressReader.quit == nil {
-				progressReader.quit = make(chan bool)
-				go progressReader.printProgress(progressReader.quit)
+			// Lazily create the quit channel only once.
+			// This signals whether we have started the "printing" goroutine already.
+			// We only want to spin up the printing goroutine the *first* time someone
+			// calls Read.
+			if pr.quit == nil {
+				pr.quit = make(chan bool)
+				go pr.printProgress(pr.quit)
 			}
 
-			progressReader.mutex.Lock()
-			progressReader.bytesRead += int64(n)
-			progressReader.mutex.Unlock()
+			pr.mutex.Lock()
+			pr.bytesRead += int64(n)
+			pr.mutex.Unlock()
 
-			if progressReader.total == progressReader.bytesRead {
-				progressReader.quit <- true
+			// Once we have read bytes = the total size we set via SetTotalSize
+			// we can stop printing
+			if pr.total <= pr.bytesRead {
+				pr.quit <- true
 				return n, err
 			}
 		}
@@ -60,29 +76,50 @@ func (progressReader *ProgressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (progressReader *ProgressReader) Seek(offset int64, whence int) (int64, error) {
-	return progressReader.ioReadSeeker.Seek(offset, whence)
+// Seek seeks via the underlying Seeker
+//
+// It then updates its running total of the number of bytes read
+// Because according to the definition of the Seek interface,
+// "Seek returns the new offset relative to the start of the file and an error, if any."
+//
+func (pr *ProgressReader) Seek(offset int64, whence int) (int64, error) {
+	n, err := pr.r.Seek(offset, whence)
+	pr.mutex.Lock()
+	pr.bytesRead = int64(n)
+	pr.mutex.Unlock()
+
+	return n, err
 }
 
-func (progressReader *ProgressReader) printProgress(quit chan bool) {
-	timer := time.NewTicker(progressReader.outputInterval)
+// Close will close the underlying Closer,
+// and if there is a printing goroutine running,
+// signal it to quit
+func (pr *ProgressReader) Close() error {
+	if pr.quit != nil {
+		pr.quit <- true
+	}
+	return pr.r.Close()
+}
+
+func (pr *ProgressReader) printProgress(quit chan bool) {
+	timer := time.NewTicker(pr.outputInterval)
 
 	for {
 		select {
 		case <-quit:
 			//The spaces are there to ensure we overwrite the entire line
 			//before using the terminal printer to output Done Uploading
-			progressReader.ui.PrintCapturingNoOutput("\r                             ")
-			progressReader.ui.Say("\rDone uploading")
+			pr.ui.PrintCapturingNoOutput("\r                             ")
+			pr.ui.Say("\rDone uploading")
 			return
 		case <-timer.C:
-			progressReader.mutex.RLock()
-			progressReader.ui.PrintCapturingNoOutput("\r%s uploaded...", formatters.ByteSize(progressReader.bytesRead))
-			progressReader.mutex.RUnlock()
+			pr.mutex.RLock()
+			pr.ui.PrintCapturingNoOutput("\r%s uploaded...", formatters.ByteSize(pr.bytesRead))
+			pr.mutex.RUnlock()
 		}
 	}
 }
 
-func (progressReader *ProgressReader) SetTotalSize(size int64) {
-	progressReader.total = size
+func (pr *ProgressReader) SetTotalSize(size int64) {
+	pr.total = size
 }

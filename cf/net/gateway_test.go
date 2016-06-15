@@ -372,7 +372,7 @@ var _ = Describe("Gateway", func() {
 		})
 	})
 
-	Describe("when uploading a file", func() {
+	FDescribe("when uploading a file", func() {
 		var (
 			err          error
 			request      *Request
@@ -418,7 +418,8 @@ var _ = Describe("Gateway", func() {
 		})
 
 		Describe("when the access token expires during the upload", func() {
-			It("successfully re-sends the file on the second request", func() {
+			FIt("successfully re-sends the file on the second request", func() {
+				fmt.Println("running test")
 				_, apiErr = ccGateway.PerformRequest(request)
 				Expect(apiErr).NotTo(HaveOccurred())
 			})

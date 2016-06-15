@@ -371,20 +371,32 @@ func (gateway Gateway) doRequestHandlingAuth(request *Request) (*http.Response, 
 		httpReq.Body = ioutil.NopCloser(request.SeekableBody)
 	}
 
+	//if request.SeekableBody != nil {
+	//	rc, ok := request.SeekableBody.(io.ReadCloser)
+	//	if !ok {
+	//		rc = ioutil.NopCloser(request.SeekableBody)
+	//	}
+	//	httpReq.Body = rc
+	//}
+
 	// perform request
+	fmt.Println("performing request")
 	rawResponse, err := gateway.doRequestAndHandlerError(request)
 	if err == nil || gateway.authenticator == nil {
 		return rawResponse, err
 	}
+	fmt.Println("performed request")
 
 	switch err.(type) {
 	case *errors.InvalidTokenError:
 		// refresh the auth token
+		fmt.Println("generating new auth token")
 		var newToken string
 		newToken, err = gateway.authenticator.RefreshAuthToken()
 		if err != nil {
 			return rawResponse, err
 		}
+		fmt.Println("generated new auth token")
 
 		// reset the auth token and request body
 		httpReq.Header.Set("Authorization", newToken)
@@ -393,18 +405,31 @@ func (gateway Gateway) doRequestHandlingAuth(request *Request) (*http.Response, 
 			httpReq.Body = ioutil.NopCloser(request.SeekableBody)
 		}
 
+		//if request.SeekableBody != nil {
+		//	rc, ok := request.SeekableBody.(io.ReadCloser)
+		//	if !ok {
+		//		rc = ioutil.NopCloser(request.SeekableBody)
+		//	}
+		//	httpReq.Body = rc
+		//}
+
 		// make the request again
+		fmt.Println("performing request retry")
 		rawResponse, err = gateway.doRequestAndHandlerError(request)
+		fmt.Println("performed request retry")
 	}
 
 	return rawResponse, err
 }
 
 func (gateway Gateway) doRequestAndHandlerError(request *Request) (*http.Response, error) {
+	fmt.Println("do request and handle error called")
 	rawResponse, err := gateway.doRequest(request.HTTPReq)
 	if err != nil {
 		return rawResponse, WrapNetworkErrors(request.HTTPReq.URL.Host, err)
 	}
+
+	fmt.Println("response code", rawResponse.StatusCode)
 
 	if rawResponse.StatusCode > 299 {
 		jsonBytes, _ := ioutil.ReadAll(rawResponse.Body)

@@ -92,8 +92,8 @@ var _ = Describe("WarningsCollector", func() {
 				warningsCollector := net.NewWarningsCollector(ui, warning_producer_one, warning_producer_two)
 
 				warningsCollector.PrintWarnings()
-				//Expect(len(ui.Outputs())).To(Equal(1))
-				//Expect(ui.Outputs()).To(ContainSubstrings([]string{"A warning"}))
+				//Expect(ui.SayCallCount()).To(Equal(1))
+				//Expect(ui.SayArgsForCall(0)).To(ContainSubstring("A warning"))
 			})
 		})
 	})
