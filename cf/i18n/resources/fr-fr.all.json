@@ -704,10 +704,6 @@
     "translation": "CF_NAME oauth-token"
   },
   {
-    "id": "CF_NAME org ORG",
-    "translation": "CF_NAME org ORG"
-  },
-  {
     "id": "CF_NAME org-users ORG",
     "translation": "CF_NAME org-users ORG"
   },
@@ -3106,6 +3102,10 @@
   {
     "id": "OPTIONS:",
     "translation": "OPTIONS:"
+  },
+  {
+    "id": "ORG",
+    "translation": "ORGANISATION"
   },
   {
     "id": "ORG ADMIN",

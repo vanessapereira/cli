@@ -19,14 +19,15 @@ import (
 
 var _ = Describe("org command", func() {
 	var (
-		ui             *testterm.FakeUI
-		getOrgModel    *plugin_models.GetOrg_Model
-		deps           commandregistry.Dependency
-		reqFactory     *requirementsfakes.FakeFactory
-		loginReq       *requirementsfakes.FakeRequirement
-		orgRequirement *requirementsfakes.FakeOrganizationRequirement
-		cmd            organization.ShowOrg
-		flagContext    flags.FlagContext
+		ui                     *testterm.FakeUI
+		getOrgModel            *plugin_models.GetOrg_Model
+		deps                   commandregistry.Dependency
+		reqFactory             *requirementsfakes.FakeFactory
+		loginReq               *requirementsfakes.FakeRequirement
+		orgRequirement         *requirementsfakes.FakeOrganizationRequirement
+		targetedOrgRequirement *requirementsfakes.FakeTargetedOrgRequirement
+		cmd                    organization.ShowOrg
+		flagContext            flags.FlagContext
 	)
 
 	BeforeEach(func() {
@@ -52,6 +53,10 @@ var _ = Describe("org command", func() {
 		orgRequirement.ExecuteReturns(nil)
 		reqFactory.NewOrganizationRequirementReturns(orgRequirement)
 
+		targetedOrgRequirement = new(requirementsfakes.FakeTargetedOrgRequirement)
+		targetedOrgRequirement.ExecuteReturns(nil)
+		reqFactory.NewTargetedOrgRequirementReturns(targetedOrgRequirement)
+
 		cmd = organization.ShowOrg{}
 		flagContext = flags.NewFlagContext(cmd.MetaData().Flags)
 		cmd.SetDependency(deps, false)
@@ -60,15 +65,19 @@ var _ = Describe("org command", func() {
 	Describe("Requirements", func() {
 		Context("when the wrong number of args are provided", func() {
 			BeforeEach(func() {
-				err := flagContext.Parse()
+				err := flagContext.Parse("my-org", "something-else") // cf org my-org something-else
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("fails with no args", func() {
+			It("fails with with an incorrect usage", func() {
 				Expect(func() { cmd.Requirements(reqFactory, flagContext) }).To(Panic())
 				Expect(ui.Outputs()).To(ContainSubstrings(
 					[]string{"FAILED"},
-					[]string{"Incorrect Usage. Requires an argument"},
+					[]string{"Incorrect Usage."},
+				))
+
+				Expect(ui.Outputs()).NotTo(ContainSubstrings(
+					[]string{"Requires an argument"},
 				))
 			})
 		})
@@ -82,17 +91,52 @@ var _ = Describe("org command", func() {
 				actualRequirements = cmd.Requirements(reqFactory, flagContext)
 			})
 
-			Context("when no flags are provided", func() {
-				It("returns a login requirement", func() {
-					Expect(reqFactory.NewLoginRequirementCallCount()).To(Equal(1))
-					Expect(actualRequirements).To(ContainElement(loginReq))
+			It("returns a login requirement", func() {
+				Expect(reqFactory.NewLoginRequirementCallCount()).To(Equal(1))
+				Expect(actualRequirements).To(ContainElement(loginReq))
+			})
+
+			It("returns an organization requirement", func() {
+				Expect(reqFactory.NewOrganizationRequirementCallCount()).To(Equal(1))
+				Expect(actualRequirements).To(ContainElement(orgRequirement))
+			})
+		})
+
+		Context("when provided with zero args", func() {
+			var actualRequirements []requirements.Requirement
+
+			BeforeEach(func() {
+				err := flagContext.Parse()
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			JustBeforeEach(func() {
+				actualRequirements = cmd.Requirements(reqFactory, flagContext)
+			})
+
+			It("returns a login requirement", func() {
+				Expect(reqFactory.NewLoginRequirementCallCount()).To(Equal(1))
+				Expect(actualRequirements).To(ContainElement(loginReq))
+			})
+
+			Describe("the targeted organization requirement", func() {
+				BeforeEach(func() {
+					targetedOrgRequirement.GetOrganizationFieldsReturns(models.OrganizationFields{
+						Name: "foobar",
+					})
 				})
 
-				It("returns an organization requirement", func() {
-					Expect(reqFactory.NewOrganizationRequirementCallCount()).To(Equal(1))
-					Expect(actualRequirements).To(ContainElement(orgRequirement))
+				It("returns a targeted organization requirement", func() {
+					reqFunction := actualRequirements[len(actualRequirements)-1]
+
+					err := reqFunction.Execute()
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(reqFactory.NewTargetedOrgRequirementCallCount()).To(Equal(1))
+					Expect(reqFactory.NewOrganizationRequirementArgsForCall(0)).To(Equal("foobar"))
 				})
 			})
+
 		})
 	})
 

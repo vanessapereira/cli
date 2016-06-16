@@ -7,12 +7,6 @@ import (
 	. "github.com/cloudfoundry/cli/cf/i18n"
 )
 
-type RequirementFunction func() error
-
-func (f RequirementFunction) Execute() error {
-	return f()
-}
-
 func NewUsageRequirement(cmd Usable, errorMessage string, pred func() bool) Requirement {
 	return RequirementFunction(func() error {
 		if pred() {

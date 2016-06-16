@@ -21,7 +21,7 @@ cf/commands/curl.go:79::warning: cyclomatic complexity 11 of function (*Curl).Ex
 cf/commands/help.go:48::warning: cyclomatic complexity 13 of function (*Help).Execute() is high (> 10) (gocyclo)
 cf/commands/login.go:184::warning: cyclomatic complexity 16 of function (Login).authenticate() is high (> 10) (gocyclo)
 cf/commands/organization/create_org.go:74::warning: cyclomatic complexity 11 of function (*CreateOrg).Execute() is high (> 10) (gocyclo)
-cf/commands/organization/org.go:68::warning: cyclomatic complexity 12 of function (*ShowOrg).Execute() is high (> 10) (gocyclo)
+cf/commands/organization/org.go:86::warning: cyclomatic complexity 12 of function (*ShowOrg).Execute() is high (> 10) (gocyclo)
 cf/commands/plugin/install_plugin.go:171::warning: cyclomatic complexity 16 of function (*PluginInstall).ensurePluginIsSafeForInstallation() is high (> 10) (gocyclo)
 cf/commands/pluginrepo/add_plugin_repo.go:62::warning: cyclomatic complexity 11 of function (*AddPluginRepo).Execute() is high (> 10) (gocyclo)
 cf/commands/quota/create_quota.go:87::warning: cyclomatic complexity 14 of function (*CreateQuota).Execute() is high (> 10) (gocyclo)

@@ -36,22 +36,40 @@ func (cmd *ShowOrg) MetaData() commandregistry.CommandMetadata {
 		Name:        "org",
 		Description: T("Show org info"),
 		Usage: []string{
-			T("CF_NAME org ORG"),
+			"CF_NAME org [" + T("ORG") + "]",
 		},
 		Flags: fs,
 	}
 }
 
 func (cmd *ShowOrg) Requirements(requirementsFactory requirements.Factory, fc flags.FlagContext) []requirements.Requirement {
-	if len(fc.Args()) != 1 {
-		cmd.ui.Failed(T("Incorrect Usage. Requires an argument\n\n") + commandregistry.Commands.CommandUsage("org"))
-	}
+	var reqs []requirements.Requirement
 
-	cmd.orgReq = requirementsFactory.NewOrganizationRequirement(fc.Args()[0])
+	if len(fc.Args()) > 1 {
+		cmd.ui.Failed(T("Incorrect Usage") + ".\n\n" + commandregistry.Commands.CommandUsage("org"))
+	} else if len(fc.Args()) == 1 {
+		cmd.orgReq = requirementsFactory.NewOrganizationRequirement(fc.Args()[0])
 
-	reqs := []requirements.Requirement{
-		requirementsFactory.NewLoginRequirement(),
-		cmd.orgReq,
+		reqs = append(reqs, requirementsFactory.NewLoginRequirement(), cmd.orgReq)
+
+	} else {
+		f := func() error {
+			targetedOrgReq := requirementsFactory.NewTargetedOrgRequirement()
+
+			err := targetedOrgReq.Execute()
+			if err != nil {
+				return err
+			}
+
+			orgName := targetedOrgReq.GetOrganizationFields().Name
+
+			orgReq := requirementsFactory.NewOrganizationRequirement(orgName)
+			cmd.orgReq = orgReq
+
+			return orgReq.Execute()
+		}
+
+		reqs = append(reqs, requirementsFactory.NewLoginRequirement(), requirements.RequirementFunction(f))
 	}
 
 	return reqs
