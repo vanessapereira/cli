@@ -36,7 +36,7 @@ import (
 	"github.com/onsi/gomega/gbytes"
 )
 
-var _ = Describe("Push Command", func() {
+var _ = FDescribe("Push Command", func() {
 	var (
 		cmd                        application.Push
 		ui                         *terminalfakes.FakeUI
@@ -54,6 +54,7 @@ var _ = Describe("Push Command", func() {
 		requirementsFactory        *requirementsfakes.FakeFactory
 		authRepo                   *authenticationfakes.FakeRepository
 		actor                      *actorsfakes.FakePushActor
+		routeActor                 *actorsfakes.FakeRouteActor
 		appfiles                   *appfilesfakes.FakeAppFiles
 		zipper                     *appfilesfakes.FakeZipper
 		deps                       commandregistry.Dependency
@@ -89,6 +90,7 @@ var _ = Describe("Push Command", func() {
 		wordGenerator = new(generatorfakes.FakeWordGenerator)
 		wordGenerator.BabbleReturns("random-host")
 		actor = new(actorsfakes.FakePushActor)
+		routeActor = new(actorsfakes.FakeRouteActor)
 		zipper = new(appfilesfakes.FakeZipper)
 		appfiles = new(appfilesfakes.FakeAppFiles)
 
@@ -98,6 +100,7 @@ var _ = Describe("Push Command", func() {
 			ManifestRepo:  manifestRepo,
 			WordGenerator: wordGenerator,
 			PushActor:     actor,
+			RouteActor:    routeActor,
 			AppZipper:     zipper,
 			AppFiles:      appfiles,
 		}
@@ -333,19 +336,6 @@ var _ = Describe("Push Command", func() {
 				})
 			})
 
-			It("tries to find the default route for the app", func() {
-				Expect(executeErr).NotTo(HaveOccurred())
-
-				Expect(routeRepo.FindCallCount()).To(Equal(1))
-
-				host, domain, path, port := routeRepo.FindArgsForCall(0)
-
-				Expect(host).To(Equal("manifest-host"))
-				Expect(domain.Name).To(Equal("foo.cf-app.com"))
-				Expect(path).To(Equal(""))
-				Expect(port).To(Equal(0))
-			})
-
 			Context("when given a bad path", func() {
 				BeforeEach(func() {
 					actor.ProcessPathStub = func(dirOrZipFile string, f func(string) error) error {
@@ -368,17 +358,19 @@ var _ = Describe("Push Command", func() {
 			})
 
 			Context("when the default route for the app already exists", func() {
+				var route models.Route
 				BeforeEach(func() {
-					routeRepo.FindReturns(
-						models.Route{
-							GUID: "my-route-guid",
-							Host: "app-name",
-							Domain: models.DomainFields{
-								Name:   "foo.cf-app.com",
-								GUID:   "foo-domain-guid",
-								Shared: true,
-							},
+					route = models.Route{
+						GUID: "my-route-guid",
+						Host: "app-name",
+						Domain: models.DomainFields{
+							Name:   "foo.cf-app.com",
+							GUID:   "foo-domain-guid",
+							Shared: true,
 						},
+					}
+					routeActor.FindOrCreateRouteReturns(
+						route,
 						nil,
 					)
 				})
@@ -391,20 +383,10 @@ var _ = Describe("Push Command", func() {
 					It("binds to existing routes", func() {
 						Expect(executeErr).NotTo(HaveOccurred())
 
-						Expect(routeRepo.CreateCallCount()).To(BeZero())
-
-						Expect(routeRepo.FindCallCount()).To(Equal(1))
-						host, _, _, _ := routeRepo.FindArgsForCall(0)
-						Expect(host).To(Equal("manifest-host"))
-
-						Expect(routeRepo.BindCallCount()).To(Equal(1))
-						boundRouteGUID, boundAppGUID := routeRepo.BindArgsForCall(0)
-						Expect(boundAppGUID).To(Equal("app-name-guid"))
-						Expect(boundRouteGUID).To(Equal("my-route-guid"))
-
-						fullOutput := terminal.Decolorize(string(output.Contents()))
-						Expect(fullOutput).To(ContainSubstring("Using route app-name.foo.cf-app.com"))
-						Expect(fullOutput).To(ContainSubstring("Binding app-name.foo.cf-app.com to app-name...\nOK"))
+						Expect(routeActor.BindRouteCallCount()).To(Equal(1))
+						boundApp, boundRoute := routeActor.BindRouteArgsForCall(0)
+						Expect(boundApp.GUID).To(Equal("app-name-guid"))
+						Expect(boundRoute).To(Equal(route))
 					})
 				})
 
