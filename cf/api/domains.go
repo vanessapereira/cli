@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"strings"
 
 	. "github.com/cloudfoundry/cli/cf/i18n"
 
@@ -20,6 +22,8 @@ type DomainRepository interface {
 	ListDomainsForOrg(orgGUID string, cb func(models.DomainFields) bool) error
 	FindSharedByName(name string) (domain models.DomainFields, apiErr error)
 	FindPrivateByName(name string) (domain models.DomainFields, apiErr error)
+	FindAllSharedByName(names []string) ([]models.DomainFields, error)
+	FindAllPrivateByName(orgGUID string, names []string) ([]models.DomainFields, error)
 	FindByNameInOrg(name string, owningOrgGUID string) (domain models.DomainFields, apiErr error)
 	Create(domainName string, owningOrgGUID string) (createdDomain models.DomainFields, apiErr error)
 	CreateSharedDomain(domainName string, routerGroupGUID string) (apiErr error)
@@ -71,6 +75,36 @@ func (repo CloudControllerDomainRepository) FindSharedByName(name string) (domai
 
 func (repo CloudControllerDomainRepository) FindPrivateByName(name string) (domain models.DomainFields, apiErr error) {
 	return repo.findOneWithPath(repo.strategy.PrivateDomainURL(name), name)
+}
+
+func (repo CloudControllerDomainRepository) FindAllSharedByName(names []string) ([]models.DomainFields, error) {
+	path := fmt.Sprintf("%s?q=name:%%20IN%%20%s", repo.strategy.SharedDomainsURL(), strings.Join(names, ","))
+	list := []models.DomainFields{}
+	err := repo.gateway.ListPaginatedResources(
+		repo.config.APIEndpoint(),
+		path,
+		resources.DomainResource{},
+		func(resource interface{}) bool {
+			res := resource.(resources.DomainResource).ToFields()
+			list = append(list, res)
+			return true
+		})
+	return list, err
+}
+
+func (repo CloudControllerDomainRepository) FindAllPrivateByName(orgGUID string, names []string) ([]models.DomainFields, error) {
+	path := fmt.Sprintf("%s?q=name:%%20IN%%20%s", repo.strategy.PrivateDomainsByOrgURL(orgGUID), strings.Join(names, ","))
+	list := []models.DomainFields{}
+	err := repo.gateway.ListPaginatedResources(
+		repo.config.APIEndpoint(),
+		path,
+		resources.DomainResource{},
+		func(resource interface{}) bool {
+			res := resource.(resources.DomainResource).ToFields()
+			list = append(list, res)
+			return true
+		})
+	return list, err
 }
 
 func (repo CloudControllerDomainRepository) FindByNameInOrg(name string, orgGUID string) (domain models.DomainFields, apiErr error) {

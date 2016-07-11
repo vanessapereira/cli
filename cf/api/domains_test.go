@@ -113,6 +113,39 @@ var _ = Describe("DomainRepository", func() {
 		Expect(domain.Shared).To(BeTrue())
 	})
 
+	It("finds multiple shared domains by name", func() {
+		setupTestServer(apifakes.NewCloudControllerTestRequest(testnet.TestRequest{
+			Method: "GET",
+			Path:   "/v2/domains?q=name:%20IN%20domain2.cf-app.com,domain3.cf-app.com",
+			Response: testnet.TestResponse{Status: http.StatusOK, Body: `
+				{
+					"resources": [
+						{
+							"metadata": { "guid": "domain2-guid" },
+							"entity": { "name": "domain2.cf-app.com" }
+						},
+						{
+							"metadata": { "guid": "domain3-guid" },
+							"entity": { "name": "domain3.cf-app.com" }
+						}
+					]
+				}`},
+		}))
+
+		domains, err := repo.FindAllSharedByName([]string{"domain2.cf-app.com", "domain3.cf-app.com"})
+		Expect(handler).To(HaveAllRequestsCalled())
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(domains).To(HaveLen(2))
+		Expect(domains[0].Name).To(Equal("domain2.cf-app.com"))
+		Expect(domains[0].GUID).To(Equal("domain2-guid"))
+		Expect(domains[0].Shared).To(BeTrue())
+
+		Expect(domains[1].Name).To(Equal("domain3.cf-app.com"))
+		Expect(domains[1].GUID).To(Equal("domain3-guid"))
+		Expect(domains[1].Shared).To(BeTrue())
+	})
+
 	It("finds a private domain by name", func() {
 		setupTestServer(apifakes.NewCloudControllerTestRequest(testnet.TestRequest{
 			Method: "GET",
@@ -135,6 +168,45 @@ var _ = Describe("DomainRepository", func() {
 		Expect(domain.Name).To(Equal("domain2.cf-app.com"))
 		Expect(domain.GUID).To(Equal("domain2-guid"))
 		Expect(domain.Shared).To(BeFalse())
+	})
+
+	It("finds multiple private domains by name", func() {
+		setupTestServer(apifakes.NewCloudControllerTestRequest(testnet.TestRequest{
+			Method: "GET",
+			Path:   "/v2/domains?q=name:%20IN%20domain2.cf-app.com,domain3.cf-app.com",
+			Response: testnet.TestResponse{Status: http.StatusOK, Body: `
+		{
+			"resources": [
+				{
+					"metadata": { "guid": "domain2-guid" },
+					"entity": {
+					"name": "domain2.cf-app.com",
+					"owning_organization_guid": "my-org-guid"
+				 }
+				},
+				{
+					"metadata": { "guid": "domain3-guid" },
+					"entity": {
+					"name": "domain3.cf-app.com",
+					"owning_organization_guid": "my-org-guid"
+				 }
+				}
+			]
+		}`},
+		}))
+
+		domains, err := repo.FindAllPrivateByName("my-org-guid", []string{"domain2.cf-app.com", "domain3.cf-app.com"})
+		Expect(handler).To(HaveAllRequestsCalled())
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(domains).To(HaveLen(2))
+		Expect(domains[0].Name).To(Equal("domain2.cf-app.com"))
+		Expect(domains[0].GUID).To(Equal("domain2-guid"))
+		Expect(domains[0].Shared).To(BeFalse())
+
+		Expect(domains[1].Name).To(Equal("domain3.cf-app.com"))
+		Expect(domains[1].GUID).To(Equal("domain3-guid"))
+		Expect(domains[1].Shared).To(BeFalse())
 	})
 
 	It("returns domains with router group types", func() {

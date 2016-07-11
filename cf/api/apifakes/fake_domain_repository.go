@@ -36,6 +36,25 @@ type FakeDomainRepository struct {
 		result1 models.DomainFields
 		result2 error
 	}
+	FindAllSharedByNameStub        func(names []string) ([]models.DomainFields, error)
+	findAllSharedByNameMutex       sync.RWMutex
+	findAllSharedByNameArgsForCall []struct {
+		names []string
+	}
+	findAllSharedByNameReturns struct {
+		result1 []models.DomainFields
+		result2 error
+	}
+	FindAllPrivateByNameStub        func(orgGUID string, names []string) ([]models.DomainFields, error)
+	findAllPrivateByNameMutex       sync.RWMutex
+	findAllPrivateByNameArgsForCall []struct {
+		orgGUID string
+		names   []string
+	}
+	findAllPrivateByNameReturns struct {
+		result1 []models.DomainFields
+		result2 error
+	}
 	FindByNameInOrgStub        func(name string, owningOrgGUID string) (domain models.DomainFields, apiErr error)
 	findByNameInOrgMutex       sync.RWMutex
 	findByNameInOrgArgsForCall []struct {
@@ -91,6 +110,8 @@ type FakeDomainRepository struct {
 		result1 models.DomainFields
 		result2 error
 	}
+	invocations      map[string][][]interface{}
+	invocationsMutex sync.RWMutex
 }
 
 func (fake *FakeDomainRepository) ListDomainsForOrg(orgGUID string, cb func(models.DomainFields) bool) error {
@@ -99,6 +120,7 @@ func (fake *FakeDomainRepository) ListDomainsForOrg(orgGUID string, cb func(mode
 		orgGUID string
 		cb      func(models.DomainFields) bool
 	}{orgGUID, cb})
+	fake.recordInvocation("ListDomainsForOrg", []interface{}{orgGUID, cb})
 	fake.listDomainsForOrgMutex.Unlock()
 	if fake.ListDomainsForOrgStub != nil {
 		return fake.ListDomainsForOrgStub(orgGUID, cb)
@@ -131,6 +153,7 @@ func (fake *FakeDomainRepository) FindSharedByName(name string) (domain models.D
 	fake.findSharedByNameArgsForCall = append(fake.findSharedByNameArgsForCall, struct {
 		name string
 	}{name})
+	fake.recordInvocation("FindSharedByName", []interface{}{name})
 	fake.findSharedByNameMutex.Unlock()
 	if fake.FindSharedByNameStub != nil {
 		return fake.FindSharedByNameStub(name)
@@ -164,6 +187,7 @@ func (fake *FakeDomainRepository) FindPrivateByName(name string) (domain models.
 	fake.findPrivateByNameArgsForCall = append(fake.findPrivateByNameArgsForCall, struct {
 		name string
 	}{name})
+	fake.recordInvocation("FindPrivateByName", []interface{}{name})
 	fake.findPrivateByNameMutex.Unlock()
 	if fake.FindPrivateByNameStub != nil {
 		return fake.FindPrivateByNameStub(name)
@@ -192,12 +216,92 @@ func (fake *FakeDomainRepository) FindPrivateByNameReturns(result1 models.Domain
 	}{result1, result2}
 }
 
+func (fake *FakeDomainRepository) FindAllSharedByName(names []string) ([]models.DomainFields, error) {
+	var namesCopy []string
+	if names != nil {
+		namesCopy = make([]string, len(names))
+		copy(namesCopy, names)
+	}
+	fake.findAllSharedByNameMutex.Lock()
+	fake.findAllSharedByNameArgsForCall = append(fake.findAllSharedByNameArgsForCall, struct {
+		names []string
+	}{namesCopy})
+	fake.recordInvocation("FindAllSharedByName", []interface{}{namesCopy})
+	fake.findAllSharedByNameMutex.Unlock()
+	if fake.FindAllSharedByNameStub != nil {
+		return fake.FindAllSharedByNameStub(names)
+	} else {
+		return fake.findAllSharedByNameReturns.result1, fake.findAllSharedByNameReturns.result2
+	}
+}
+
+func (fake *FakeDomainRepository) FindAllSharedByNameCallCount() int {
+	fake.findAllSharedByNameMutex.RLock()
+	defer fake.findAllSharedByNameMutex.RUnlock()
+	return len(fake.findAllSharedByNameArgsForCall)
+}
+
+func (fake *FakeDomainRepository) FindAllSharedByNameArgsForCall(i int) []string {
+	fake.findAllSharedByNameMutex.RLock()
+	defer fake.findAllSharedByNameMutex.RUnlock()
+	return fake.findAllSharedByNameArgsForCall[i].names
+}
+
+func (fake *FakeDomainRepository) FindAllSharedByNameReturns(result1 []models.DomainFields, result2 error) {
+	fake.FindAllSharedByNameStub = nil
+	fake.findAllSharedByNameReturns = struct {
+		result1 []models.DomainFields
+		result2 error
+	}{result1, result2}
+}
+
+func (fake *FakeDomainRepository) FindAllPrivateByName(orgGUID string, names []string) ([]models.DomainFields, error) {
+	var namesCopy []string
+	if names != nil {
+		namesCopy = make([]string, len(names))
+		copy(namesCopy, names)
+	}
+	fake.findAllPrivateByNameMutex.Lock()
+	fake.findAllPrivateByNameArgsForCall = append(fake.findAllPrivateByNameArgsForCall, struct {
+		orgGUID string
+		names   []string
+	}{orgGUID, namesCopy})
+	fake.recordInvocation("FindAllPrivateByName", []interface{}{orgGUID, namesCopy})
+	fake.findAllPrivateByNameMutex.Unlock()
+	if fake.FindAllPrivateByNameStub != nil {
+		return fake.FindAllPrivateByNameStub(orgGUID, names)
+	} else {
+		return fake.findAllPrivateByNameReturns.result1, fake.findAllPrivateByNameReturns.result2
+	}
+}
+
+func (fake *FakeDomainRepository) FindAllPrivateByNameCallCount() int {
+	fake.findAllPrivateByNameMutex.RLock()
+	defer fake.findAllPrivateByNameMutex.RUnlock()
+	return len(fake.findAllPrivateByNameArgsForCall)
+}
+
+func (fake *FakeDomainRepository) FindAllPrivateByNameArgsForCall(i int) (string, []string) {
+	fake.findAllPrivateByNameMutex.RLock()
+	defer fake.findAllPrivateByNameMutex.RUnlock()
+	return fake.findAllPrivateByNameArgsForCall[i].orgGUID, fake.findAllPrivateByNameArgsForCall[i].names
+}
+
+func (fake *FakeDomainRepository) FindAllPrivateByNameReturns(result1 []models.DomainFields, result2 error) {
+	fake.FindAllPrivateByNameStub = nil
+	fake.findAllPrivateByNameReturns = struct {
+		result1 []models.DomainFields
+		result2 error
+	}{result1, result2}
+}
+
 func (fake *FakeDomainRepository) FindByNameInOrg(name string, owningOrgGUID string) (domain models.DomainFields, apiErr error) {
 	fake.findByNameInOrgMutex.Lock()
 	fake.findByNameInOrgArgsForCall = append(fake.findByNameInOrgArgsForCall, struct {
 		name          string
 		owningOrgGUID string
 	}{name, owningOrgGUID})
+	fake.recordInvocation("FindByNameInOrg", []interface{}{name, owningOrgGUID})
 	fake.findByNameInOrgMutex.Unlock()
 	if fake.FindByNameInOrgStub != nil {
 		return fake.FindByNameInOrgStub(name, owningOrgGUID)
@@ -232,6 +336,7 @@ func (fake *FakeDomainRepository) Create(domainName string, owningOrgGUID string
 		domainName    string
 		owningOrgGUID string
 	}{domainName, owningOrgGUID})
+	fake.recordInvocation("Create", []interface{}{domainName, owningOrgGUID})
 	fake.createMutex.Unlock()
 	if fake.CreateStub != nil {
 		return fake.CreateStub(domainName, owningOrgGUID)
@@ -266,6 +371,7 @@ func (fake *FakeDomainRepository) CreateSharedDomain(domainName string, routerGr
 		domainName      string
 		routerGroupGUID string
 	}{domainName, routerGroupGUID})
+	fake.recordInvocation("CreateSharedDomain", []interface{}{domainName, routerGroupGUID})
 	fake.createSharedDomainMutex.Unlock()
 	if fake.CreateSharedDomainStub != nil {
 		return fake.CreateSharedDomainStub(domainName, routerGroupGUID)
@@ -298,6 +404,7 @@ func (fake *FakeDomainRepository) Delete(domainGUID string) (apiErr error) {
 	fake.deleteArgsForCall = append(fake.deleteArgsForCall, struct {
 		domainGUID string
 	}{domainGUID})
+	fake.recordInvocation("Delete", []interface{}{domainGUID})
 	fake.deleteMutex.Unlock()
 	if fake.DeleteStub != nil {
 		return fake.DeleteStub(domainGUID)
@@ -330,6 +437,7 @@ func (fake *FakeDomainRepository) DeleteSharedDomain(domainGUID string) (apiErr 
 	fake.deleteSharedDomainArgsForCall = append(fake.deleteSharedDomainArgsForCall, struct {
 		domainGUID string
 	}{domainGUID})
+	fake.recordInvocation("DeleteSharedDomain", []interface{}{domainGUID})
 	fake.deleteSharedDomainMutex.Unlock()
 	if fake.DeleteSharedDomainStub != nil {
 		return fake.DeleteSharedDomainStub(domainGUID)
@@ -363,6 +471,7 @@ func (fake *FakeDomainRepository) FirstOrDefault(orgGUID string, name *string) (
 		orgGUID string
 		name    *string
 	}{orgGUID, name})
+	fake.recordInvocation("FirstOrDefault", []interface{}{orgGUID, name})
 	fake.firstOrDefaultMutex.Unlock()
 	if fake.FirstOrDefaultStub != nil {
 		return fake.FirstOrDefaultStub(orgGUID, name)
@@ -389,6 +498,46 @@ func (fake *FakeDomainRepository) FirstOrDefaultReturns(result1 models.DomainFie
 		result1 models.DomainFields
 		result2 error
 	}{result1, result2}
+}
+
+func (fake *FakeDomainRepository) Invocations() map[string][][]interface{} {
+	fake.invocationsMutex.RLock()
+	defer fake.invocationsMutex.RUnlock()
+	fake.listDomainsForOrgMutex.RLock()
+	defer fake.listDomainsForOrgMutex.RUnlock()
+	fake.findSharedByNameMutex.RLock()
+	defer fake.findSharedByNameMutex.RUnlock()
+	fake.findPrivateByNameMutex.RLock()
+	defer fake.findPrivateByNameMutex.RUnlock()
+	fake.findAllSharedByNameMutex.RLock()
+	defer fake.findAllSharedByNameMutex.RUnlock()
+	fake.findAllPrivateByNameMutex.RLock()
+	defer fake.findAllPrivateByNameMutex.RUnlock()
+	fake.findByNameInOrgMutex.RLock()
+	defer fake.findByNameInOrgMutex.RUnlock()
+	fake.createMutex.RLock()
+	defer fake.createMutex.RUnlock()
+	fake.createSharedDomainMutex.RLock()
+	defer fake.createSharedDomainMutex.RUnlock()
+	fake.deleteMutex.RLock()
+	defer fake.deleteMutex.RUnlock()
+	fake.deleteSharedDomainMutex.RLock()
+	defer fake.deleteSharedDomainMutex.RUnlock()
+	fake.firstOrDefaultMutex.RLock()
+	defer fake.firstOrDefaultMutex.RUnlock()
+	return fake.invocations
+}
+
+func (fake *FakeDomainRepository) recordInvocation(key string, args []interface{}) {
+	fake.invocationsMutex.Lock()
+	defer fake.invocationsMutex.Unlock()
+	if fake.invocations == nil {
+		fake.invocations = map[string][][]interface{}{}
+	}
+	if fake.invocations[key] == nil {
+		fake.invocations[key] = [][]interface{}{}
+	}
+	fake.invocations[key] = append(fake.invocations[key], args)
 }
 
 var _ api.DomainRepository = new(FakeDomainRepository)
